@@ -20,7 +20,6 @@
         .numero.branco { background-color: #fff; color: #000; box-shadow: 0 0 8px #fff; }
         .numero.preto { color: var(--hacker-green); background-color: transparent; border: 1px solid var(--hacker-green); box-shadow: none; }
         .ai-panel { background-color: var(--panel-dark); border: 1px solid var(--glow-color-soft); border-radius: 4px; padding: 20px; margin-bottom: 25px; backdrop-filter: blur(5px); box-shadow: inset 0 0 10px rgba(0, 255, 65, 0.1), 0 0 10px rgba(0, 255, 65, 0.1); }
-        .ai-panel:last-child { margin-bottom: 0; }
         .ai-panel h2, .ai-config h3 { text-transform: uppercase; letter-spacing: 2px; text-align: center; margin-top: 0; margin-bottom: 20px; animation: text-flicker 5s linear infinite reverse; }
         .ai-stats { display: flex; justify-content: space-between; margin-bottom: 20px; font-size: 1em; text-transform: uppercase; flex-wrap: wrap; gap: 10px; }
         .ai-prediction { text-align: center; padding: 15px; border-radius: 4px; background-color: rgba(0, 0, 0, 0.3); border: 1px dashed var(--glow-color-soft); }
@@ -142,17 +141,12 @@
             }
 
             function atualizarPainelIA() { uiAiStatus.textContent = aiState.status; uiAiWins.textContent = aiState.wins; uiAiLosses.textContent = aiState.losses; if (aiState.cooldownRounds > 0) { uiAiStatus.textContent = `COOLDOWN (${aiState.cooldownRounds}r)`; } let signalText = '::AGUARDANDO::'; if (aiState.currentPrediction) { signalText = `PREVISÃO: ${aiState.currentPrediction.toUpperCase()}`; } uiAiSignal.textContent = signalText; }
-            function getCor(numero) { if (numero === 0) return 'branco'; if (numero >= 1 && numero <= 7) return 'vermelho'; return 'preto'; }
-
+            
             // --- CÉREBRO DA IA ---
             function gerenciarCicloIA(historicoCores) {
                 const config = carregarConfigIA();
-
-                // --- CORREÇÃO DO BUG: Lógica de verificação de resultado foi restaurada ---
                 if (aiState.entradaLevel > 0) {
                     const corResultado = historicoCores[0];
-
-                    // Reseta em caso de anomalia (branco)
                     if (corResultado === 'branco') {
                         aiState.status = 'ANOMALIA DETECTADA (BRANCO)';
                         aiState.entradaLevel = 0;
@@ -160,8 +154,6 @@
                         aiState.activePattern = null;
                         return;
                     }
-                    
-                    // Compara o resultado com a previsão
                     if (corResultado === aiState.currentPrediction) {
                         aiState.wins++;
                         registrarResultadoDoPadrao(true);
@@ -174,28 +166,20 @@
                         aiState.cooldownRounds = config.cooldown.triggerValue;
                         somDerrota.play();
                     }
-                    
-                    // Reseta o estado para permitir nova análise
                     aiState.entradaLevel = 0;
                     aiState.currentPrediction = null;
                     aiState.activePattern = null;
-                    return; // Sai da função para esperar a próxima rodada antes de analisar de novo
+                    return; 
                 }
-                // --- FIM DA CORREÇÃO ---
-
-
                 if (aiState.cooldownRounds > 0) {
                     aiState.cooldownRounds--;
-                    if(aiState.cooldownRounds === 0) {
-                        aiState.status = 'ANALISANDO FLUXO DE DADOS...';
-                    }
+                    if(aiState.cooldownRounds === 0) { aiState.status = 'ANALISANDO FLUXO DE DADOS...'; }
                     return;
                 }
                 
                 aiState.status = 'ANALISANDO FLUXO DE DADOS...';
                 let Oportunidades = [];
                 
-                // Analisadores de Padrão (Lógica de confiança)
                 let streakCount = 0; for (let i = 0; i < historicoCores.length; i++) { if (historicoCores[i] === historicoCores[0] && historicoCores[i] !== 'branco') streakCount++; else break; } if (streakCount >= config.streak.triggerValue) { const confidence = config.streak.confidence + (streakCount - config.streak.triggerValue) * 5; Oportunidades.push({ name: 'streak', prediction: (historicoCores[0] === 'vermelho') ? 'preto' : 'vermelho', confidence: confidence }); }
                 if (historicoCores.length >= config.zigueZague.triggerValue) { const sequencia = historicoCores.slice(0, config.zigueZague.triggerValue); const isAlternating = sequencia.every((c, i) => i === 0 || c !== sequencia[i-1]); if (isAlternating && !sequencia.includes('branco')) { Oportunidades.push({ name: 'zigueZague', prediction: historicoCores[0], confidence: config.zigueZague.confidence }); } }
                 if (historicoCores.length >= config.dominancia.historyLength) { const sequencia = historicoCores.slice(0, config.dominancia.historyLength); const vermelhos = sequencia.filter(c => c === 'vermelho').length; const pretos = sequencia.filter(c => c === 'preto').length; if (vermelhos >= config.dominancia.triggerValue) { const confidence = config.dominancia.confidence + (vermelhos - config.dominancia.triggerValue) * 5; Oportunidades.push({ name: 'dominancia', prediction: 'preto', confidence: confidence }); } else if (pretos >= config.dominancia.triggerValue) { const confidence = config.dominancia.confidence + (pretos - config.dominancia.triggerValue) * 5; Oportunidades.push({ name: 'dominancia', prediction: 'vermelho', confidence: confidence }); } }
@@ -220,7 +204,7 @@
             async function fetchResultados() {
                 try {
                     // IMPORTANTE: Substitua pela sua URL ATUAL do ngrok.
-                    const apiUrl = 'https://bc1a-2804-d59-831a-8500-7cf2-9a10-ff23-170d.ngrok-free.app/api/resultados';
+                    const apiUrl = 'https://8f2a-2804-d59-831a-8500-2c33-23e4-4c01-1f5e.ngrok-free.app/api/resultados';
                     
                     const response = await fetch(apiUrl, {
                         method: 'GET',
@@ -228,19 +212,36 @@
                     });
 
                     if (!response.ok) { throw new Error(`Erro de Rede: ${response.statusText}`); }
+                    
                     const data = await response.json();
-                    if (Array.isArray(data) && data.length > 0 && (ultimoHistoricoRenderizado.length === 0 || data[0] !== ultimoHistoricoRenderizado[0])) {
+                    
+                    // --- INÍCIO DAS CORREÇÕES ---
+                    
+                    // 1. Verificação de novos dados: Compara o ID da rodada mais recente.
+                    if (Array.isArray(data) && data.length > 0 && (!ultimoHistoricoRenderizado.length || data[0].id_rodada !== ultimoHistoricoRenderizado[0].id_rodada)) {
+                        
                         ultimoHistoricoRenderizado = data;
-                        resultadosDiv.innerHTML = '';
-                        data.slice().reverse().forEach(numero => {
+                        resultadosDiv.innerHTML = ''; // Limpa os resultados antigos
+
+                        // 2. Loop corrigido: Itera sobre a lista de objetos (`item`) e exibe os últimos 50.
+                        data.slice(0, 50).reverse().forEach(item => {
                             const span = document.createElement('span');
-                            span.textContent = numero;
-                            span.classList.add('numero', getCor(numero));
+                            
+                            // 3. Pega o NÚMERO do objeto item
+                            span.textContent = item.numero; 
+                            
+                            // 4. Pega a COR do objeto item (e converte para minúscula para o CSS)
+                            span.classList.add('numero', item.cor.toLowerCase()); 
+                            
                             resultadosDiv.appendChild(span);
                         });
-                        const historicoCores = data.map(getCor);
+                        
+                        // 5. Cria o histórico de cores para a IA usando a COR do objeto item
+                        const historicoCores = data.map(item => item.cor.toLowerCase()); 
                         gerenciarCicloIA(historicoCores);
                     }
+                    // --- FIM DAS CORREÇÕES ---
+
                 } catch (error) {
                     console.error('Falha na conexão com o servidor:', error);
                     uiAiStatus.textContent = 'CONEXÃO FALHOU';
