@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Strategy Terminal</title>
+    <title>AI Strategy Terminal v2.2 (FIXED)</title>
     <style>
+        /* O CSS permanece o mesmo da versão anterior */
         @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap');
         :root { --hacker-green: #00ff41; --background-dark: #000000; --panel-dark: rgba(20, 20, 20, 0.5); --glow-color: rgba(0, 255, 65, 0.75); --glow-color-soft: rgba(0, 255, 65, 0.5); --hacker-red: #ff4757; }
         @keyframes scanline { 0% { background-position: 0 0; } 100% { background-position: 0 100%; } }
@@ -36,12 +37,6 @@
         .win-rate.bad { color: var(--hacker-red); }
         .param-input { width: 50px; background-color: var(--background-dark); color: var(--hacker-green); border: 1px solid var(--glow-color-soft); border-radius: 2px; text-align: center; font-family: 'Roboto Mono', monospace; }
         .param-input:focus { outline: none; border-color: var(--hacker-green); box-shadow: 0 0 5px var(--glow-color); }
-        .switch { position: relative; display: inline-block; width: 50px; height: 24px; }
-        .switch input { opacity: 0; width: 0; height: 0; }
-        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #333; transition: .4s; border-radius: 2px; border: 1px solid var(--glow-color-soft); }
-        .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 2px; background-color: var(--hacker-green); transition: .4s; border-radius: 1px; }
-        input:checked + .slider { background-color: var(--hacker-green); box-shadow: 0 0 10px var(--glow-color); }
-        input:checked + .slider:before { background-color: var(--background-dark); transform: translateX(26px); }
         #btn-reset-memoria { width: 100%; padding: 10px; font-family: 'Roboto Mono', monospace; font-size: 1em; text-transform: uppercase; letter-spacing: 1px; background-color: transparent; color: var(--hacker-red); border: 1px solid var(--hacker-red); border-radius: 2px; cursor: pointer; transition: all 0.3s ease; }
         #btn-reset-memoria:hover { background-color: var(--hacker-red); color: var(--background-dark); box-shadow: 0 0 15px var(--hacker-red); }
         @media (max-width: 768px) { body { padding: 10px; font-size: 14px; } .container { padding: 15px; } h1 { font-size: 1.5em; letter-spacing: 2px; } .numero { width: 40px; height: 40px; font-size: 1.2em; } .ai-stats { flex-direction: column; align-items: flex-start; gap: 8px; } .config-item { grid-template-columns: 1fr; gap: 15px; } .config-item .pattern-controls { justify-content: flex-start; } }
@@ -49,7 +44,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>[ A.I. Strategy Terminal ]</h1>
+        <h1>[ A.I. Strategy Terminal v2.2 (FIXED) ]</h1>
         <div id="resultados">
             <p style="width: 100%; opacity: 0.7;">Aguardando fluxo de dados...</p>
         </div>
@@ -91,23 +86,150 @@
             let ultimoHistoricoRenderizado = [];
             const aiState = { wins: 0, losses: 0, status: 'ANALISANDO FLUXO DE DADOS...', entradaLevel: 0, cooldownRounds: 0, currentPrediction: null, activePattern: null };
 
-            function carregarConfigIA() { const configSalva = localStorage.getItem('iaConfig'); const defaultConfig = { 'streak': { enabled: true, triggerValue: 3 }, 'zigueZague': { enabled: true, triggerValue: 4 }, 'dominancia': { enabled: true, triggerValue: 7, historyLength: 10 }, 'cooldown': { enabled: true, triggerValue: 5 } }; const loadedConfig = configSalva ? JSON.parse(configSalva) : {}; return Object.keys(defaultConfig).reduce((acc, key) => { acc[key] = { ...defaultConfig[key], ...(loadedConfig[key] || {}) }; return acc; }, {}); }
+            function carregarConfigIA() {
+                const configSalva = localStorage.getItem('iaConfig');
+                const defaultConfig = {
+                    'streak': { triggerValue: 3, confidence: 60 },
+                    'zigueZague': { triggerValue: 4, confidence: 65 },
+                    'dominancia': { triggerValue: 7, historyLength: 10, confidence: 70 },
+                    'cooldown': { triggerValue: 5 },
+                    'minConfidence': { triggerValue: 50 }
+                };
+                const loadedConfig = configSalva ? JSON.parse(configSalva) : {};
+                return Object.keys(defaultConfig).reduce((acc, key) => {
+                    acc[key] = { ...defaultConfig[key], ...(loadedConfig[key] || {}) };
+                    return acc;
+                }, {});
+            }
             function salvarConfigIA(config) { localStorage.setItem('iaConfig', JSON.stringify(config)); }
             function carregarMemoriaIA() { const memoriaSalva = localStorage.getItem('iaMemory'); let memoria = memoriaSalva ? JSON.parse(memoriaSalva) : {}; const padroesDefault = { 'streak': { wins: 0, losses: 0 }, 'zigueZague': { wins: 0, losses: 0 }, 'dominancia': { wins: 0, losses: 0 } }; return { ...padroesDefault, ...memoria }; }
             function salvarMemoriaIA(memoria) { localStorage.setItem('iaMemory', JSON.stringify(memoria)); }
             function registrarResultadoDoPadrao(isWin) { if (!aiState.activePattern) return; const memoria = carregarMemoriaIA(); if (isWin) { memoria[aiState.activePattern].wins++; } else { memoria[aiState.activePattern].losses++; } salvarMemoriaIA(memoria); atualizarPainelControle(); }
-            function resetarMemoria() { const userInput = prompt("Para continuar, digite a senha de administrador:"); if (userInput === null) { return; } if (userInput === SENHA_RESET) { if (confirm("Senha correta. Você tem CERTEZA que deseja resetar TODAS as estatísticas? Esta ação não pode ser desfeita.")) { localStorage.removeItem('iaMemory'); console.log("Memória da IA resetada pelo administrador."); atualizarPainelControle(); } } else { alert("ACESSO NEGADO: Senha incorreta."); } }
+            function resetarMemoria() { const userInput = prompt("Para continuar, digite a senha de administrador:"); if (userInput === null) return; if (userInput === SENHA_RESET) { if (confirm("Senha correta. Você tem CERTEZA que deseja resetar TODAS as estatísticas?")) { localStorage.removeItem('iaMemory'); atualizarPainelControle(); } } else { alert("ACESSO NEGADO: Senha incorreta."); } }
             
-            function getPatternDisplayName(patternName) { switch(patternName) { case 'streak': return 'Padrão::Sequência'; case 'zigueZague': return 'Padrão::Zigue-Zague'; case 'dominancia': return 'Padrão::Dominância'; case 'cooldown': return 'Sistema::Cooldown'; default: return patternName; } }
-            function atualizarPainelControle() { const memoria = carregarMemoriaIA(); const config = carregarConfigIA(); uiConfigList.innerHTML = ''; Object.keys(config).forEach(key => { const itemConfig = config[key]; const itemStats = memoria[key]; const displayName = getPatternDisplayName(key); const itemDiv = document.createElement('div'); itemDiv.classList.add('config-item'); let statsHTML = ''; if(itemStats){ const total = itemStats.wins + itemStats.losses; const winRate = total > 0 ? ((itemStats.wins / total) * 100).toFixed(1) : 0; const winRateClass = winRate >= 50 ? 'good' : 'bad'; statsHTML = `<span class="pattern-score">${itemStats.wins}V / ${itemStats.losses}D | ${winRate}%</span>`; } let paramsHTML = ''; if(key !== 'cooldown'){ paramsHTML += `Gatilho: <input type="number" class="param-input" id="param-${key}-trigger" value="${itemConfig.triggerValue}">`; if(itemConfig.historyLength) { paramsHTML += `<span> em </span><input type="number" class="param-input" id="param-${key}-length" value="${itemConfig.historyLength}">`; } } else { paramsHTML += `Duração: <input type="number" class="param-input" id="param-${key}-trigger" value="${itemConfig.triggerValue}"> rodadas`; } itemDiv.innerHTML = `<div class="pattern-details"><span class="pattern-name">${displayName}</span>${statsHTML}</div><div class="pattern-controls">${paramsHTML}<label class="switch"><input type="checkbox" id="toggle-${key}" ${itemConfig.enabled ? 'checked' : ''}><span class="slider"></span></label></div>`; uiConfigList.appendChild(itemDiv); document.getElementById(`toggle-${key}`).addEventListener('change', (e) => { const newConfig = carregarConfigIA(); newConfig[key].enabled = e.target.checked; salvarConfigIA(newConfig); }); const triggerInput = document.getElementById(`param-${key}-trigger`); if(triggerInput) { triggerInput.addEventListener('input', (e) => { const newConfig = carregarConfigIA(); newConfig[key].triggerValue = parseInt(e.target.value) || 0; salvarConfigIA(newConfig); }); } const lengthInput = document.getElementById(`param-${key}-length`); if(lengthInput) { lengthInput.addEventListener('input', (e) => { const newConfig = carregarConfigIA(); newConfig[key].historyLength = parseInt(e.target.value) || 0; salvarConfigIA(newConfig); }); } }); }
-            function atualizarPainelIA() { uiAiStatus.textContent = aiState.status; uiAiWins.textContent = aiState.wins; uiAiLosses.textContent = aiState.losses; if (aiState.cooldownRounds > 0) { uiAiStatus.textContent = `COOLDOWN (${aiState.cooldownRounds}r)`; } let signalText = '::AGUARDANDO::'; let signalColor = 'var(--hacker-green)'; if (aiState.currentPrediction === 'vermelho') { signalText = 'PREVISÃO: VERMELHO'; } else if (aiState.currentPrediction === 'preto') { signalText = 'PREVISÃO: PRETO'; } uiAiSignal.textContent = signalText; }
+            function getPatternDisplayName(patternName) { switch(patternName) { case 'streak': return 'Padrão::Sequência'; case 'zigueZague': return 'Padrão::Zigue-Zague'; case 'dominancia': return 'Padrão::Dominância'; case 'cooldown': return 'Sistema::Cooldown'; case 'minConfidence': return 'Confiança Mínima'; default: return patternName; } }
             
+            function atualizarPainelControle() {
+                const memoria = carregarMemoriaIA();
+                const config = carregarConfigIA();
+                uiConfigList.innerHTML = '';
+                Object.keys(config).forEach(key => {
+                    const itemConfig = config[key];
+                    const itemStats = memoria[key];
+                    const displayName = getPatternDisplayName(key);
+                    const itemDiv = document.createElement('div');
+                    itemDiv.classList.add('config-item');
+                    let statsHTML = '';
+                    if(itemStats){
+                        const total = itemStats.wins + itemStats.losses;
+                        const winRate = total > 0 ? ((itemStats.wins / total) * 100).toFixed(1) : 0;
+                        statsHTML = `<span class="pattern-score">${itemStats.wins}V / ${itemStats.losses}D | ${winRate}%</span>`;
+                    }
+                    let paramsHTML = '';
+                    const paramId = `param-${key}-trigger`;
+                    if(key === 'dominancia'){ paramsHTML = `Gatilho: <input type="number" class="param-input" id="${paramId}" value="${itemConfig.triggerValue}"> em <input type="number" class="param-input" id="param-${key}-length" value="${itemConfig.historyLength}">`; }
+                    else if (key === 'cooldown' || key === 'minConfidence') { paramsHTML = `Valor: <input type="number" class="param-input" id="${paramId}" value="${itemConfig.triggerValue}">`; }
+                    else { paramsHTML = `Gatilho: <input type="number" class="param-input" id="${paramId}" value="${itemConfig.triggerValue}"> | Confiança Base: <input type="number" class="param-input" id="param-${key}-confidence" value="${itemConfig.confidence}">%`; }
+                    itemDiv.innerHTML = `<div class="pattern-details"><span class="pattern-name">${displayName}</span>${statsHTML}</div><div class="pattern-controls">${paramsHTML}</div>`;
+                    uiConfigList.appendChild(itemDiv);
+                    const triggerInput = document.getElementById(paramId);
+                    if(triggerInput) { triggerInput.addEventListener('input', (e) => { const newConfig = carregarConfigIA(); newConfig[key].triggerValue = parseInt(e.target.value) || 0; salvarConfigIA(newConfig); }); }
+                    const lengthInput = document.getElementById(`param-${key}-length`);
+                    if(lengthInput) { lengthInput.addEventListener('input', (e) => { const newConfig = carregarConfigIA(); newConfig[key].historyLength = parseInt(e.target.value) || 0; salvarConfigIA(newConfig); }); }
+                    const confidenceInput = document.getElementById(`param-${key}-confidence`);
+                    if(confidenceInput) { confidenceInput.addEventListener('input', (e) => { const newConfig = carregarConfigIA(); newConfig[key].confidence = parseInt(e.target.value) || 0; salvarConfigIA(newConfig); }); }
+                });
+            }
+
+            function atualizarPainelIA() { uiAiStatus.textContent = aiState.status; uiAiWins.textContent = aiState.wins; uiAiLosses.textContent = aiState.losses; if (aiState.cooldownRounds > 0) { uiAiStatus.textContent = `COOLDOWN (${aiState.cooldownRounds}r)`; } let signalText = '::AGUARDANDO::'; if (aiState.currentPrediction) { signalText = `PREVISÃO: ${aiState.currentPrediction.toUpperCase()}`; } uiAiSignal.textContent = signalText; }
             function getCor(numero) { if (numero === 0) return 'branco'; if (numero >= 1 && numero <= 7) return 'vermelho'; return 'preto'; }
+
+            // --- CÉREBRO DA IA ---
+            function gerenciarCicloIA(historicoCores) {
+                const config = carregarConfigIA();
+
+                // --- CORREÇÃO DO BUG: Lógica de verificação de resultado foi restaurada ---
+                if (aiState.entradaLevel > 0) {
+                    const corResultado = historicoCores[0];
+
+                    // Reseta em caso de anomalia (branco)
+                    if (corResultado === 'branco') {
+                        aiState.status = 'ANOMALIA DETECTADA (BRANCO)';
+                        aiState.entradaLevel = 0;
+                        aiState.currentPrediction = null;
+                        aiState.activePattern = null;
+                        return;
+                    }
+                    
+                    // Compara o resultado com a previsão
+                    if (corResultado === aiState.currentPrediction) {
+                        aiState.wins++;
+                        registrarResultadoDoPadrao(true);
+                        aiState.status = 'RESULTADO: VITÓRIA';
+                        somVitoria.play();
+                    } else {
+                        aiState.losses++;
+                        registrarResultadoDoPadrao(false);
+                        aiState.status = 'RESULTADO: DERROTA. INICIANDO COOLDOWN...';
+                        aiState.cooldownRounds = config.cooldown.triggerValue;
+                        somDerrota.play();
+                    }
+                    
+                    // Reseta o estado para permitir nova análise
+                    aiState.entradaLevel = 0;
+                    aiState.currentPrediction = null;
+                    aiState.activePattern = null;
+                    return; // Sai da função para esperar a próxima rodada antes de analisar de novo
+                }
+                // --- FIM DA CORREÇÃO ---
+
+
+                if (aiState.cooldownRounds > 0) {
+                    aiState.cooldownRounds--;
+                    if(aiState.cooldownRounds === 0) {
+                        aiState.status = 'ANALISANDO FLUXO DE DADOS...';
+                    }
+                    return;
+                }
+                
+                aiState.status = 'ANALISANDO FLUXO DE DADOS...';
+                let Oportunidades = [];
+                
+                // Analisadores de Padrão (Lógica de confiança)
+                let streakCount = 0; for (let i = 0; i < historicoCores.length; i++) { if (historicoCores[i] === historicoCores[0] && historicoCores[i] !== 'branco') streakCount++; else break; } if (streakCount >= config.streak.triggerValue) { const confidence = config.streak.confidence + (streakCount - config.streak.triggerValue) * 5; Oportunidades.push({ name: 'streak', prediction: (historicoCores[0] === 'vermelho') ? 'preto' : 'vermelho', confidence: confidence }); }
+                if (historicoCores.length >= config.zigueZague.triggerValue) { const sequencia = historicoCores.slice(0, config.zigueZague.triggerValue); const isAlternating = sequencia.every((c, i) => i === 0 || c !== sequencia[i-1]); if (isAlternating && !sequencia.includes('branco')) { Oportunidades.push({ name: 'zigueZague', prediction: historicoCores[0], confidence: config.zigueZague.confidence }); } }
+                if (historicoCores.length >= config.dominancia.historyLength) { const sequencia = historicoCores.slice(0, config.dominancia.historyLength); const vermelhos = sequencia.filter(c => c === 'vermelho').length; const pretos = sequencia.filter(c => c === 'preto').length; if (vermelhos >= config.dominancia.triggerValue) { const confidence = config.dominancia.confidence + (vermelhos - config.dominancia.triggerValue) * 5; Oportunidades.push({ name: 'dominancia', prediction: 'preto', confidence: confidence }); } else if (pretos >= config.dominancia.triggerValue) { const confidence = config.dominancia.confidence + (pretos - config.dominancia.triggerValue) * 5; Oportunidades.push({ name: 'dominancia', prediction: 'vermelho', confidence: confidence }); } }
+                
+                if (Oportunidades.length === 0) return;
+                
+                const memoria = carregarMemoriaIA();
+                Oportunidades.forEach(op => { const stats = memoria[op.name]; const total = stats.wins + stats.losses; if (total > 5) { const winRate = (stats.wins / total); if(winRate > 0.6) op.confidence += 10; if(winRate < 0.4) op.confidence -= 10; } });
+                
+                Oportunidades.sort((a, b) => b.confidence - a.confidence);
+                const melhorOportunidade = Oportunidades[0];
+                
+                if (melhorOportunidade.confidence >= config.minConfidence.triggerValue) {
+                    aiState.entradaLevel = 1;
+                    aiState.activePattern = melhorOportunidade.name;
+                    aiState.currentPrediction = melhorOportunidade.prediction;
+                    aiState.status = `SINAL [${getPatternDisplayName(melhorOportunidade.name)}] C/${melhorOportunidade.confidence.toFixed(0)}%`;
+                    somSinal.play();
+                }
+            }
+            
             function gerenciarCicloIA(historicoCores) { const config = carregarConfigIA(); if (aiState.entradaLevel > 0) { const corResultado = historicoCores[0]; if (corResultado === 'branco') { aiState.status = 'ANOMALIA DETECTADA (BRANCO)'; aiState.entradaLevel = 0; aiState.currentPrediction = null; aiState.activePattern = null; return; } if (corResultado === aiState.currentPrediction) { aiState.wins++; registrarResultadoDoPadrao(true); aiState.status = `SUCESSO NA TENTATIVA ${aiState.entradaLevel}`; aiState.entradaLevel = 0; aiState.currentPrediction = null; aiState.activePattern = null; somVitoria.play(); } else { if (aiState.entradaLevel === 1) { aiState.status = 'FALHA NA 1ª. ACIONANDO 2ª...'; aiState.entradaLevel = 2; } else { aiState.losses++; registrarResultadoDoPadrao(false); aiState.status = 'FALHA TOTAL. INICIANDO COOLDOWN...'; aiState.entradaLevel = 0; aiState.currentPrediction = null; aiState.cooldownRounds = config.cooldown.triggerValue; aiState.activePattern = null; somDerrota.play(); } } return; } if (aiState.cooldownRounds > 0) { aiState.cooldownRounds--; if(aiState.cooldownRounds === 0) { aiState.status = 'ANALISANDO FLUXO DE DADOS...'; } return; } aiState.status = 'ANALISANDO FLUXO DE DADOS...'; let triggeredPatterns = []; if (config.zigueZague.enabled && historicoCores.length >= config.zigueZague.triggerValue) { const sequencia = historicoCores.slice(0, config.zigueZague.triggerValue); const isAlternating = sequencia.every((c, i) => i === 0 || c !== sequencia[i-1]); if(isAlternating && !sequencia.includes('branco')) { triggeredPatterns.push({ name: 'zigueZague', prediction: historicoCores[0] }); } } if (config.streak.enabled && historicoCores.length >= config.streak.triggerValue) { const sequencia = historicoCores.slice(0, config.streak.triggerValue); if (sequencia.every(c => c === sequencia[0] && c !== 'branco')) { triggeredPatterns.push({ name: 'streak', prediction: (sequencia[0] === 'vermelho') ? 'preto' : 'vermelho' }); } } if (config.dominancia.enabled && historicoCores.length >= config.dominancia.historyLength) { const sequencia = historicoCores.slice(0, config.dominancia.historyLength); const vermelhos = sequencia.filter(c => c === 'vermelho').length; if (vermelhos >= config.dominancia.triggerValue) { triggeredPatterns.push({ name: 'dominancia', prediction: 'preto' }); } else if (sequencia.filter(c => c === 'preto').length >= config.dominancia.triggerValue) { triggeredPatterns.push({ name: 'dominancia', prediction: 'vermelho' }); } } if (triggeredPatterns.length === 0) { return; } let chosenPattern; if (triggeredPatterns.length === 1) { chosenPattern = triggeredPatterns[0]; } else { const memoria = carregarMemoriaIA(); aiState.status = 'CONFLITO. USANDO MEMÓRIA...'; chosenPattern = triggeredPatterns.reduce((best, current) => { const bestStats = memoria[best.name]; const currentStats = memoria[current.name]; const bestWinRate = (bestStats.wins + bestStats.losses > 0) ? (bestStats.wins / (bestStats.wins + bestStats.losses)) : 0; const currentWinRate = (currentStats.wins + currentStats.losses > 0) ? (currentStats.wins / (currentStats.wins + currentStats.losses)) : 0; return currentWinRate > bestWinRate ? current : best; }); } if(chosenPattern) { aiState.entradaLevel = 1; aiState.activePattern = chosenPattern.name; aiState.currentPrediction = chosenPattern.prediction; aiState.status = `PADRÃO [${getPatternDisplayName(chosenPattern.name)}]. INICIANDO 1ª TENTATIVA...`; somSinal.play(); } }
             
             // --- FUNÇÃO DE BUSCA DE DADOS MODIFICADA ---
             async function fetchResultados() {
                 try {
+                    // IMPORTANTE: Substitua pela sua URL ATUAL do ngrok.
+                    const apiUrl = 'https://bc1a-2804-d59-831a-8500-7cf2-9a10-ff23-170d.ngrok-free.app/api/resultados';
+                    
+                    const response = await fetch(apiUrl, {
+                        method: 'GET',
+                        headers: { 'ngrok-skip-browser-warning': 'true' }
+                    });
+
                     // IMPORTANTE: Coloque sua URL ATUAL do ngrok aqui!
                     const apiUrl = 'https://bc1a-2804-d59-831a-8500-7cf2-9a10-ff23-170d.ngrok-free.app/api/resultados';
                     
@@ -142,23 +264,16 @@
                 } catch (error) {
                     console.error('Falha na conexão com o servidor:', error);
                     uiAiStatus.textContent = 'CONEXÃO FALHOU';
+                    console.error('Falha na conexão com o servidor:', error);
+                    uiAiStatus.textContent = 'CONEXÃO FALHOU';
                 }
             }
 
             // --- INICIALIZAÇÃO DA APLICAÇÃO ---
             atualizarPainelControle();
             btnResetMemoria.addEventListener('click', resetarMemoria);
-            
-            setInterval(() => {
-                fetchResultados().then(() => {
-                    atualizarPainelIA();
-                });
-            }, 3000);
-
-            // Chama uma vez no início para popular a tela imediatamente
-            fetchResultados().then(() => {
-                atualizarPainelIA();
-            });
+            setInterval(() => { fetchResultados().then(() => { atualizarPainelIA(); }); }, 3000);
+            fetchResultados().then(() => { atualizarPainelIA(); });
         });
     </script>
 </body>
