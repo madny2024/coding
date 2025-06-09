@@ -217,9 +217,6 @@
                 }
             }
             
-            function gerenciarCicloIA(historicoCores) { const config = carregarConfigIA(); if (aiState.entradaLevel > 0) { const corResultado = historicoCores[0]; if (corResultado === 'branco') { aiState.status = 'ANOMALIA DETECTADA (BRANCO)'; aiState.entradaLevel = 0; aiState.currentPrediction = null; aiState.activePattern = null; return; } if (corResultado === aiState.currentPrediction) { aiState.wins++; registrarResultadoDoPadrao(true); aiState.status = `SUCESSO NA TENTATIVA ${aiState.entradaLevel}`; aiState.entradaLevel = 0; aiState.currentPrediction = null; aiState.activePattern = null; somVitoria.play(); } else { if (aiState.entradaLevel === 1) { aiState.status = 'FALHA NA 1ª. ACIONANDO 2ª...'; aiState.entradaLevel = 2; } else { aiState.losses++; registrarResultadoDoPadrao(false); aiState.status = 'FALHA TOTAL. INICIANDO COOLDOWN...'; aiState.entradaLevel = 0; aiState.currentPrediction = null; aiState.cooldownRounds = config.cooldown.triggerValue; aiState.activePattern = null; somDerrota.play(); } } return; } if (aiState.cooldownRounds > 0) { aiState.cooldownRounds--; if(aiState.cooldownRounds === 0) { aiState.status = 'ANALISANDO FLUXO DE DADOS...'; } return; } aiState.status = 'ANALISANDO FLUXO DE DADOS...'; let triggeredPatterns = []; if (config.zigueZague.enabled && historicoCores.length >= config.zigueZague.triggerValue) { const sequencia = historicoCores.slice(0, config.zigueZague.triggerValue); const isAlternating = sequencia.every((c, i) => i === 0 || c !== sequencia[i-1]); if(isAlternating && !sequencia.includes('branco')) { triggeredPatterns.push({ name: 'zigueZague', prediction: historicoCores[0] }); } } if (config.streak.enabled && historicoCores.length >= config.streak.triggerValue) { const sequencia = historicoCores.slice(0, config.streak.triggerValue); if (sequencia.every(c => c === sequencia[0] && c !== 'branco')) { triggeredPatterns.push({ name: 'streak', prediction: (sequencia[0] === 'vermelho') ? 'preto' : 'vermelho' }); } } if (config.dominancia.enabled && historicoCores.length >= config.dominancia.historyLength) { const sequencia = historicoCores.slice(0, config.dominancia.historyLength); const vermelhos = sequencia.filter(c => c === 'vermelho').length; if (vermelhos >= config.dominancia.triggerValue) { triggeredPatterns.push({ name: 'dominancia', prediction: 'preto' }); } else if (sequencia.filter(c => c === 'preto').length >= config.dominancia.triggerValue) { triggeredPatterns.push({ name: 'dominancia', prediction: 'vermelho' }); } } if (triggeredPatterns.length === 0) { return; } let chosenPattern; if (triggeredPatterns.length === 1) { chosenPattern = triggeredPatterns[0]; } else { const memoria = carregarMemoriaIA(); aiState.status = 'CONFLITO. USANDO MEMÓRIA...'; chosenPattern = triggeredPatterns.reduce((best, current) => { const bestStats = memoria[best.name]; const currentStats = memoria[current.name]; const bestWinRate = (bestStats.wins + bestStats.losses > 0) ? (bestStats.wins / (bestStats.wins + bestStats.losses)) : 0; const currentWinRate = (currentStats.wins + currentStats.losses > 0) ? (currentStats.wins / (currentStats.wins + currentStats.losses)) : 0; return currentWinRate > bestWinRate ? current : best; }); } if(chosenPattern) { aiState.entradaLevel = 1; aiState.activePattern = chosenPattern.name; aiState.currentPrediction = chosenPattern.prediction; aiState.status = `PADRÃO [${getPatternDisplayName(chosenPattern.name)}]. INICIANDO 1ª TENTATIVA...`; somSinal.play(); } }
-            
-            // --- FUNÇÃO DE BUSCA DE DADOS MODIFICADA ---
             async function fetchResultados() {
                 try {
                     // IMPORTANTE: Substitua pela sua URL ATUAL do ngrok.
@@ -230,40 +227,21 @@
                         headers: { 'ngrok-skip-browser-warning': 'true' }
                     });
 
-                    // IMPORTANTE: Coloque sua URL ATUAL do ngrok aqui!
-                    const apiUrl = 'https://bc1a-2804-d59-831a-8500-7cf2-9a10-ff23-170d.ngrok-free.app/api/resultados';
-                    
-                    const response = await fetch(apiUrl, {
-                        method: 'GET',
-                        headers: {
-                            'ngrok-skip-browser-warning': 'true'
-                        }
-                    });
-
                     if (!response.ok) { throw new Error(`Erro de Rede: ${response.statusText}`); }
-                    
                     const data = await response.json();
-
-                    if (Array.isArray(data) && data.length > 0) {
-                        if (data[0] !== ultimoHistoricoRenderizado[0]) {
-                            ultimoHistoricoRenderizado = data;
-
-                            resultadosDiv.innerHTML = '';
-
-                            data.slice().reverse().forEach(numero => {
-                                const span = document.createElement('span');
-                                span.textContent = numero;
-                                span.classList.add('numero', getCor(numero));
-                                resultadosDiv.appendChild(span);
-                            });
-
-                            const historicoCores = data.map(getCor);
-                            gerenciarCicloIA(historicoCores);
-                        }
+                    if (Array.isArray(data) && data.length > 0 && (ultimoHistoricoRenderizado.length === 0 || data[0] !== ultimoHistoricoRenderizado[0])) {
+                        ultimoHistoricoRenderizado = data;
+                        resultadosDiv.innerHTML = '';
+                        data.slice().reverse().forEach(numero => {
+                            const span = document.createElement('span');
+                            span.textContent = numero;
+                            span.classList.add('numero', getCor(numero));
+                            resultadosDiv.appendChild(span);
+                        });
+                        const historicoCores = data.map(getCor);
+                        gerenciarCicloIA(historicoCores);
                     }
                 } catch (error) {
-                    console.error('Falha na conexão com o servidor:', error);
-                    uiAiStatus.textContent = 'CONEXÃO FALHOU';
                     console.error('Falha na conexão com o servidor:', error);
                     uiAiStatus.textContent = 'CONEXÃO FALHOU';
                 }
